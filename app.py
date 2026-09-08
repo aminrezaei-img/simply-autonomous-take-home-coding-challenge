@@ -201,7 +201,7 @@ with tab_stats:
                         title="dialogue %"),
         tooltip=["chapter", "words", "dialogue_pct", "pages"],
     ).properties(height=380)
-    st.altair_chart(bars, use_container_width=True)
+    st.altair_chart(bars, width="stretch")
     st.caption("Bar height = chapter length; colour = share of words inside double quotes.")
 
     st.subheader("Emotional arc")
@@ -211,7 +211,7 @@ with tab_stats:
         tooltip=["chapter", "sentiment"],
     )
     zero = alt.Chart(pd.DataFrame({"y": [0]})).mark_rule(strokeDash=[4, 4]).encode(y="y")
-    st.altair_chart((line + zero).properties(height=320), use_container_width=True)
+    st.altair_chart((line + zero).properties(height=320), width="stretch")
     st.caption("Sentence-level VADER sentiment, sampled ~400 sentences per chapter.")
 
     st.subheader("Character presence")
@@ -230,7 +230,7 @@ with tab_stats:
         color=alt.Color("mentions:Q", scale=alt.Scale(scheme="magma")),
         tooltip=["character", "chapter", "mentions"],
     ).properties(height=460)
-    st.altair_chart(hm, use_container_width=True)
+    st.altair_chart(hm, width="stretch")
     st.caption(
         "Whole-word counts for a fixed 26-name presence lexicon. This is a "
         "presence signal, not NER and not automatic character discovery — "
@@ -254,7 +254,7 @@ with tab_map:
         color=alt.Color("chapter:N", title="chapter"),
         tooltip=["chapter", "pages", "preview"],
     ).properties(height=620)
-    st.altair_chart(scatter, use_container_width=True)
+    st.altair_chart(scatter, width="stretch")
     st.caption(f"{len(m)} chunk vectors · {man['dense_dim']} dimensions → 2 via PCA")
 
 # ---------------------------------------------------------------- Reader
