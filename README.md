@@ -2,9 +2,13 @@
 
 An end-to-end pipeline that turns a book into a searchable, explorable corpus:
 **ingest → chapter-aware corpus records → chunk + embed + sparse index → hybrid
-retrieval → interactive Streamlit tool**. The input is a local plain-text Harry
-Potter book (`.txt`); a born-digital PDF adapter takes the same path. The book
-text is never committed — you supply your own copy and build the corpus locally.
+retrieval → interactive tools**. The input is a local plain-text Harry Potter
+book (`.txt`); a born-digital PDF adapter takes the same path. The book text is
+never committed — you supply your own copy and build the corpus locally.
+
+Two front ends sit on that one representation: a **Streamlit tool** (search,
+analytics, embedding map, reader) and a **browser 3-D explorer** (Three.js
+scatter of the embedding space with in-browser cosine neighbours).
 
 The tool exposes six corpus attributes, all extracted from the real book:
 chapter structure, vocabulary, dialogue share, character presence, sentiment
@@ -31,6 +35,8 @@ What it does:
 | Chunk (sentence-aware) + embed + TF-IDF | `build_index.py` | `index/dense.npy`, `index/tfidf.npz`, `index/chunks.jsonl`, `index/manifest.json` |
 | Retrieve: dense, sparse, hybrid RRF, filters | `search.py` | ranked hits with citations |
 | Explore: search, analytics, embedding map, reader | `app.py` | Streamlit app on `http://localhost:8501` |
+| Export one bundle for the browser | `export_web.py` | `web/data/corpus3d.json` (gitignored — contains text + vectors) |
+| Explore in 3-D: embedding space, search, reader | `web/` | browser UI on `http://localhost:8502` |
 | Measure retrieval quality (optional) | `evaluate.py` | Hit@1 / Hit@3 / MRR per mode |
 
 ---
@@ -86,14 +92,31 @@ Environment overrides (all optional):
 | `CORPUS_INDEX_DIR` | `index` | index to read |
 | `CORPUS_ENCODER` | *(unset)* | `hashing` forces the offline fallback encoder (no model download) |
 
-### 5. Command-line retrieval
+### 5. Browser 3-D explorer (optional)
+
+`export_web.py` writes one JSON bundle — the corpus attributes, a 3-D PCA
+projection of the chunk vectors, the vectors themselves, and chunk text — that
+the browser UI reads. The bundle is gitignored because it contains book text.
+
+```bash
+python export_web.py corpus index web/data/corpus3d.json   # ~2 s → 2.0 MB, 501 points
+python -m http.server 8502 --directory web                 # then open the URL
+```
+
+Open `http://localhost:8502`. Drag to orbit, scroll to zoom, click a point for
+the chunk text plus its nearest chunks, search chunk text, click a chapter to
+isolate it. Three.js is fetched from a CDN, so the page needs network access;
+the data is local. Opening `index.html` from `file://` does not work — `fetch()`
+requires HTTP.
+
+### 6. Command-line retrieval
 
 ```bash
 python search.py "the lamp burning"              # all three modes, top 3 each
 python search.py "wingardium leviosa" index      # explicit index directory
 ```
 
-### 6. Tests
+### 7. Tests
 
 ```bash
 python -m pytest tests -q
@@ -121,6 +144,9 @@ flowchart LR
     H --> J["Corpus analytics"]
     H --> K["Embedding space"]
     H --> L["Reader"]
+    F --> M["export_web.py<br/>attributes + PCA-3"]
+    M --> N["web/data/corpus3d.json<br/>(gitignored)"]
+    N --> O["web/ — Three.js explorer<br/>3-D map · keyword search · reader"]
 ```
 
 ---
@@ -133,11 +159,14 @@ the code where it is computed.
 | Attribute | What it shows | Extraction method | Where |
 |---|---|---|---|
 | **Chapter structure** | chapters, words/paragraphs per chapter, chapter-length profile | PDF: PyMuPDF TOC entries → page ranges → block text; TXT: `CHAPTER <word/number>` heading regex | `ingest.chapters_from_pdf` / `chapters_from_txt` |
-| **Vocabulary / lexical stats** | unique words, type–token ratio, most frequent content words | token regex + frequency count, English stopword list, chapter-level aggregation | `app.py` analytics tab |
+| **Vocabulary / lexical stats** | unique words, type–token ratio, most frequent content words | token regex + frequency count, English stopword list, chapter-level aggregation | `corpus_attributes.chapter_rows` |
 | **Dialogue share** | % of words inside double quotes, per chapter and corpus-wide | one regex (`"[^"]+"`) over typographically normalized text; computed **once** in `ingest.py` and stored in `corpus_meta.json` | `ingest.dialogue_words` |
-| **Character presence** | mentions of 26 named characters per chapter | fixed whole-word presence lexicon — a mention counter, **not** NER | `app.CHARACTER_PRESENCE` |
-| **Sentiment trajectory** | VADER compound score per chapter | sentence-sampled VADER sentiment, averaged per chapter | `app.chapter_sentiment` |
-| **Semantic / retrieval structure** | 2-D PCA of chunk embeddings, nearest chunks, hybrid retrieval | fastembed ONNX embeddings (`bge-small-en-v1.5`, 384-d) + PCA; TF-IDF 1–2 grams for sparse | `build_index.py`, `app.pca_map` |
+| **Character presence** | mentions of 26 named characters per chapter | fixed whole-word presence lexicon — a mention counter, **not** NER | `corpus_attributes.CHARACTER_PRESENCE` |
+| **Sentiment trajectory** | VADER compound score per chapter | sentence-sampled VADER sentiment, averaged per chapter | `corpus_attributes.chapter_sentiment` |
+| **Semantic / retrieval structure** | 3-D PCA of chunk embeddings (browser) / 2-D (Streamlit), nearest chunks, hybrid retrieval | fastembed ONNX embeddings (`bge-small-en-v1.5`, 384-d) + PCA; TF-IDF 1–2 grams for sparse | `build_index.py`, `corpus_attributes.project` |
+
+Both front ends read `corpus_attributes.py` for these attributes, so the browser
+and the Streamlit app cannot report different numbers for the same chapter.
 
 Why these six: they span three different levels — *document structure*
 (chapters), *surface language* (vocabulary, dialogue), *narrative content*
@@ -180,6 +209,13 @@ fusion (RRF, k=60) of the two lists, which needs no score calibration between
 modalities. Metadata filters (`chapter`, `page`) are applied to the candidate set
 before ranking, so a filtered search can never return an out-of-filter chunk
 (tested).
+
+**Two front ends, one representation.** `export_web.py` reads the same
+`corpus.jsonl`, `chunks.jsonl` and `dense.npy` the Streamlit app reads, adds a
+3-D PCA projection and the canonical attributes, and writes one JSON bundle. The
+browser recomputes nothing: it renders the bundle, scores keywords over chunk
+text, and runs cosine over the shipped vectors. There is no second analysis
+pipeline — only a second view.
 
 **Provenance.** Every chunk carries `id`, `chapter_index`, `chapter`, `pages`,
 `chunk_in_chapter`. Every hit carries a citation string — `CHAPTER SEVEN
@@ -266,6 +302,22 @@ words*. It is a presence lexicon, not named-entity recognition: it will count
 that is also a name would need to be excluded by hand. This is stated in the UI
 next to the chart, not buried in the code.
 
+### Why two front ends?
+
+The Streamlit app is the retrieval tool: three modes, filters, analytics, reader.
+The browser explorer answers a different question — *what does the embedding
+space look like* — which a 3-D scatter answers better than a 2-D chart, and which
+is cheap to serve as one static bundle. Both read the same corpus records and the
+same attribute module, so this is a second view, not a second pipeline.
+
+### Does the browser UI re-run the model or the retrieval?
+
+No. `export_web.py` ships the vectors `build_index.py` already produced, and the
+browser computes exact cosine over them (501 × 384 floats is trivial). Its search
+box is plain keyword scoring over chunk text — **not** the RRF hybrid, which
+lives in `search.py` and is evaluated by `evaluate.py`. The UI says which is
+which; it does not pretend to reproduce the Python retrieval.
+
 ### What are the limitations?
 
 See the Limitations section below. The honest summary: heuristics, one book at a
@@ -336,7 +388,13 @@ re-run rather than taken on faith.
   100k+ chunks.
 - **One book per corpus directory.** No multi-book index yet.
 - **No incremental re-index.** Changing the corpus means re-running
-  `build_index.py`.
+  `build_index.py` (and `export_web.py` if you use the browser explorer).
+- **The browser explorer is a view, not the retrieval tool.** Its search box is
+  keyword scoring and its "nearest chunks" are exact cosine over the shipped
+  vectors; dense/sparse/hybrid retrieval and its measurement live in `search.py`
+  and `evaluate.py`.
+- **The browser explorer needs a CDN for Three.js.** The bundle and the data
+  logic are local; the rendering library is fetched from jsdelivr at load time.
 
 ---
 
@@ -344,8 +402,11 @@ re-run rather than taken on faith.
 
 The book text is copyrighted and is **not** part of this repository.
 
-- `.gitignore` excludes `*.pdf`, `data/`, `corpus/`, `out/`, `index/`, `index_pdf/`.
+- `.gitignore` excludes `*.pdf`, `data/`, `corpus/`, `out/`, `index/`,
+  `index_pdf/`, `web/data/`.
 - No source passages, reconstructed chapters, or chunk text are committed.
+- `web/data/corpus3d.json` (chunk text + vectors) is generated locally by
+  `export_web.py` and gitignored for the same reason.
 - `corpus/corpus_meta.json` contains only counts and titles, no text.
 - To reproduce: bring your own legally obtained copy of the book to
   `data/raw/book.txt` and run the three commands in Usage.
@@ -354,7 +415,7 @@ The book text is copyrighted and is **not** part of this repository.
 
 ## Tests
 
-`python -m pytest tests -q` — 10 tests over an original synthetic novella
+`python -m pytest tests -q` — 15 tests over an original synthetic novella
 generated at test time (title page + three chapters), so the suite needs no book
 text and no model download.
 
@@ -370,7 +431,11 @@ They cover the load-bearing behaviour:
 - a chapter filter never leaks a chunk from another chapter;
 - RRF ranking is deterministic;
 - every hit carries a citation;
-- the Streamlit app renders and displays the canonical dialogue share.
+- the Streamlit app renders and displays the canonical dialogue share;
+- the browser bundle carries a 3-D position, provenance and text for every chunk;
+- the bundle's attributes equal the shared module's (browser and app cannot drift);
+- a stale index makes the export fail loudly instead of emitting a misaligned
+  bundle.
 
 ---
 
@@ -382,7 +447,8 @@ were complete.
 Shot list (90–120 s): app opens on the corpus header → search a query → switch
 sparse / dense / hybrid → show the chapter citation → analytics tab (chapter
 lengths, dialogue share, character presence, sentiment trajectory) → embedding
-map → Reader → `pytest` output in the terminal.
+map → Reader → browser 3-D explorer (orbit, click a point, nearest chunks) →
+`pytest` output in the terminal.
 
 ---
 
@@ -393,6 +459,9 @@ ingest.py          plain text or PDF → corpus/corpus.jsonl + corpus_meta.json
 build_index.py     corpus records → chunks, dense vectors, TF-IDF matrix
 search.py          dense / sparse / hybrid RRF retrieval with citations
 app.py             Streamlit tool: Search · Analytics · Embedding space · Reader
+corpus_attributes.py  canonical chapter attributes, shared by both front ends
+export_web.py      corpus + index → web/data/corpus3d.json (browser bundle)
+web/               Three.js explorer: 3-D map · keyword search · reader
 evaluate.py        retrieval evaluation (Hit@1 / Hit@3 / MRR per mode)
 eval/queries.jsonl labelled queries for evaluate.py
 tests/             synthetic-corpus tests (no book text, no model download)

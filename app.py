@@ -15,71 +15,30 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from pathlib import Path
 
 import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
-from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
+from corpus_attributes import (WORD_RE, chapter_rows, character_matrix,
+                               load_meta, load_records, project)
 from search import BookSearch, HashingEncoder
 
 ROOT = Path(__file__).resolve().parent
 CORPUS_DIR = Path(os.environ.get("CORPUS_DIR", ROOT / "corpus"))
 INDEX_DIR = Path(os.environ.get("CORPUS_INDEX_DIR", ROOT / "index"))
 
-# Fixed presence lexicon. Whole-word mention counts, NOT named-entity
-# recognition and NOT automatic character discovery: the list is hand-picked
-# and the app says so. See README "character presence".
-CHARACTER_PRESENCE = [
-    "Harry", "Ron", "Hermione", "Dumbledore", "Hagrid", "Snape", "Voldemort",
-    "Draco", "McGonagall", "Dudley", "Vernon", "Petunia", "Dobby", "Sirius",
-    "Quirrell", "Neville", "Fred", "George", "Percy", "Wood",
-    "Flitwick", "Trelawney", "Filch", "Norbert", "Firenze", "Griphook",
-]
-
-_SIA = SentimentIntensityAnalyzer()
-WORD_RE = re.compile(r"[A-Za-z']+")
-
-
-def chapter_sentiment(text: str) -> float:
-    """Mean VADER compound over a spread sample of ~400 sentences."""
-    sents = re.split(r"(?<=[.!?])\s+", text)
-    if not sents:
-        return 0.0
-    step = max(1, len(sents) // 400)
-    sample = sents[::step]
-    return sum(_SIA.polarity_scores(s)["compound"] for s in sample) / len(sample)
-
-
 @st.cache_data(show_spinner=False)
 def load_corpus(corpus_dir: str) -> tuple[pd.DataFrame, dict]:
+    """Chapter attributes come from corpus_attributes; this only adds the text."""
     corpus_dir = Path(corpus_dir)
-    rows = [json.loads(l) for l in
-            (corpus_dir / "corpus.jsonl").read_text(encoding="utf-8").splitlines() if l.strip()]
-    meta = json.loads((corpus_dir / "corpus_meta.json").read_text(encoding="utf-8"))
-    out = []
-    for c in rows:
-        text = c["text"]
-        out.append({
-            "index": c["chapter_index"],
-            "title": c["title"],
-            "pages": f"{c['pages'][0]}-{c['pages'][1]}" if c["pages"] else "n/a",
-            "words": len(text.split()),
-            "chars": len(text),
-            "paragraphs": len([p for p in text.split("\n\n") if p.strip()]),
-            "sentences": len(re.findall(r"[.!?](?:\s|$)", text)),
-            "dialogue_words": c.get("dialogue_words",
-                                    sum(len(m.split()) for m in re.findall(r'"[^"]+"', text))),
-            "unique_words": len({w.lower() for w in WORD_RE.findall(text)}),
-            "sentiment": round(chapter_sentiment(text), 4),
-            "text": text,
-        })
-    df = pd.DataFrame(out)
-    df["dialogue_pct"] = (100 * df["dialogue_words"] / df["words"].clip(lower=1)).round(2)
-    return df, meta
+    rows = load_records(corpus_dir)
+    out = chapter_rows(rows)
+    for r, c in zip(out, rows):
+        r["text"] = c["text"]
+    return pd.DataFrame(out), load_meta(corpus_dir)
 
 
 @st.cache_data(show_spinner=False)
@@ -103,8 +62,7 @@ def get_search(index_dir: str) -> BookSearch:
 
 
 def pca_map(dense: np.ndarray, chunks: pd.DataFrame) -> pd.DataFrame:
-    from sklearn.decomposition import PCA
-    xy = PCA(n_components=2, random_state=42).fit_transform(dense)
+    xy = project(dense, n_components=2)
     return pd.DataFrame({
         "x": xy[:, 0], "y": xy[:, 1],
         "chapter": chunks["chapter"].str.replace(r"^(?:CHAPTER|Chapter)\s+\w+\s*[-–]\s*",
@@ -215,17 +173,13 @@ with tab_stats:
     st.caption("Sentence-level VADER sentiment, sampled ~400 sentences per chapter.")
 
     st.subheader("Character presence")
-    heat = []
-    for _, r in chapters.iterrows():
-        counts = {c: len(re.findall(rf"\b{c}\b", r["text"])) for c in CHARACTER_PRESENCE}
-        heat.append({"chapter": r["title"].replace("CHAPTER ", "ch"), **counts})
-    hdf = pd.DataFrame(heat).set_index("chapter")
-    keep = hdf.sum().sort_values(ascending=False).head(14).index
-    long = hdf[keep].T.reset_index().melt(id_vars="index", var_name="chapter",
-                                          value_name="mentions")
-    long = long.rename(columns={"index": "character"})
+    cm = character_matrix(chapters.to_dict("records"))
+    labels = [t.replace("CHAPTER ", "ch") for t in chapters["title"]]
+    long = (pd.DataFrame(cm["counts"], columns=cm["names"], index=labels)
+            .rename_axis("chapter").reset_index()
+            .melt(id_vars="chapter", var_name="character", value_name="mentions"))
     hm = alt.Chart(long).mark_rect().encode(
-        x=alt.X("chapter:N", sort=[c.replace("CHAPTER ", "ch") for c in hdf.index], title=None),
+        x=alt.X("chapter:N", sort=labels, title=None),
         y=alt.Y("character:N", title=None),
         color=alt.Color("mentions:Q", scale=alt.Scale(scheme="magma")),
         tooltip=["character", "chapter", "mentions"],
