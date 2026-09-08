@@ -1,0 +1,16 @@
+# Core pipeline
+pymupdf==1.28.2
+numpy==2.4.3
+pandas==3.0.5
+scipy==1.17.1
+scikit-learn==1.9.0
+
+# Retrieval + UI
+fastembed==0.8.0
+onnxruntime==1.29.0
+streamlit==1.63.0
+altair==6.2.2
+vaderSentiment==3.3.2
+
+# Tests
+pytest==9.1.1

@@ -1,0 +1,12 @@
+{"query": "what does the sorting hat do", "must_contain": "Sorting Hat"}
+{"query": "wingardium leviosa spell", "must_contain": "Wingardium Leviosa"}
+{"query": "what is the three-headed dog called", "must_contain": "Fluffy"}
+{"query": "the mirror that shows your deepest desire", "must_contain": "Mirror of Erised"}
+{"query": "who is guarding the sorcerer's stone", "must_contain": "Sorcerer's Stone"}
+{"query": "detention in the forbidden forest", "must_contain": "Forbidden Forest"}
+{"query": "what broom does Harry get", "must_contain": "Nimbus Two Thousand"}
+{"query": "the goblin bank where wizards keep gold", "must_contain": "Gringotts"}
+{"query": "the sport played on broomsticks", "must_contain": "Quidditch"}
+{"query": "the troll in the bathroom", "must_contain": "troll"}
+{"query": "unicorn blood in the forest", "must_contain": "unicorn"}
+{"query": "Harry's invisibility cloak", "must_contain": "Invisibility Cloak"}

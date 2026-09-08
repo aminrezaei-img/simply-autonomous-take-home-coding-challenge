@@ -1,0 +1,25 @@
+# ---------------------------------------------------------------- corpus
+# The book text is copyrighted and must never be committed. Supply it locally
+# as data/raw/book.txt (or .pdf) and build the corpus and index yourself.
+*.pdf
+data/
+corpus/
+corpus_*/
+out/
+index/
+index_*/
+book.txt
+book.md
+
+# ---------------------------------------------------------------- python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+env/
+
+# ---------------------------------------------------------------- tooling
+.streamlit/secrets.toml
+.vscode/
+.idea/
