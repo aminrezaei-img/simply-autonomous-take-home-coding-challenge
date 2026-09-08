@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Corpus explorer — 3-D embedding space</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<div id="error" hidden></div>
+
+<aside id="sidebar">
+  <header>
+    <h1>Corpus explorer</h1>
+    <p id="meta" class="caption"></p>
+  </header>
+
+  <section>
+    <input id="search" type="search" autocomplete="off"
+           placeholder="Search chunk text (keyword)…">
+    <ol id="results" class="list"></ol>
+  </section>
+
+  <section>
+    <h2>Chapters</h2>
+    <ol id="chapters" class="list chapters"></ol>
+  </section>
+
+  <section>
+    <h2>Attributes</h2>
+    <div id="charts"></div>
+    <h2 class="tight">Character presence</h2>
+    <div id="heatmap"></div>
+    <p class="caption">Whole-word counts over a fixed 26-name lexicon. A presence
+      signal — not NER, not automatic character discovery.</p>
+  </section>
+</aside>
+
+<main id="stage">
+  <canvas id="scene"></canvas>
+  <div id="hud">
+    <span id="hud-text"></span>
+    <button id="reset" type="button">reset view</button>
+    <button id="spin" type="button">auto-rotate</button>
+  </div>
+</main>
+
+<aside id="detail" hidden></aside>
+<div id="tooltip" hidden></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
