@@ -121,7 +121,29 @@ flowchart LR
     H --> J["Corpus analytics"]
     H --> K["Embedding space"]
     H --> L["Reader"]
+    H --> M["Questions & Methods<br/>questions → signals → methods"]
 ```
+
+---
+
+## Why these attributes?
+
+Each attribute started as a question a reader might ask about a novel, then had
+to be measurable, traceable to the source, and complementary to the others. The
+same reasoning is stated inside the tool, in the **🧭 Questions & Methods** tab.
+
+| Question | Signal | Extraction method | Caveat |
+|---|---|---|---|
+| How does the pacing change through the book? | chapter length, average sentence length, dialogue share, unique vocabulary | chapter segmentation; token and sentence counts; quotation-span counting; vocabulary statistics | describes form, not why a chapter feels fast or slow |
+| Which characters dominate different parts of the story? | character presence by chapter | curated character-presence lexicon, exact word-boundary matching | aliases, pronouns and ambiguous surnames are not fully resolved; a presence counter, **not** NER |
+| How does emotional tone change across the narrative? | chapter-level sentiment trajectory | sentence-level VADER compound scores aggregated by chapter | lexicon-based proxy, not an emotion model or ground truth |
+| How is meaning distributed through the book, and how can a reader retrieve it? | sentence-aware chunks, dense embeddings, TF-IDF sparse, RRF, PCA map | chunking → `bge-small-en-v1.5` (384-d) + TF-IDF 1–2 grams → RRF → PCA-2 | PCA is a 2-D projection and should not be read as a faithful map of all high-dimensional relationships |
+
+Selection principles: **reader-relevant** (answers a question about the story or
+writing), **extractable** (computable from the corpus, not inferred without
+evidence), **traceable** (chapter/page provenance retained), **complementary**
+(structural, lexical, affective and semantic signals cover different aspects of
+the same corpus).
 
 ---
 

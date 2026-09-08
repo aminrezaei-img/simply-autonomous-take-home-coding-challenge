@@ -8,6 +8,7 @@ Tabs:
     Corpus analytics  structure, dialogue, character presence, sentiment
     Embedding space   2-D PCA projection of the chunk vectors
     Reader            chapter-by-chapter reading with provenance
+    Questions & Methods  questions → measurable signals → extraction methods
 
 Paths can be overridden: CORPUS_DIR, CORPUS_INDEX_DIR.
 """
@@ -22,8 +23,10 @@ import altair as alt
 import numpy as np
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
+from flow_diagram import extraction_flow_svg
 from search import BookSearch, HashingEncoder
 
 ROOT = Path(__file__).resolve().parent
@@ -140,8 +143,9 @@ st.caption(
     "hybrid dense + TF-IDF retrieval"
 )
 
-tab_search, tab_stats, tab_map, tab_read = st.tabs(
-    ["🔍 Search", "📊 Corpus analytics", "🗺️ Embedding space", "📖 Reader"]
+tab_search, tab_stats, tab_map, tab_read, tab_questions = st.tabs(
+    ["🔍 Search", "📊 Corpus analytics", "🗺️ Embedding space", "📖 Reader",
+     "🧭 Questions & Methods"]
 )
 
 # ---------------------------------------------------------------- Search
@@ -265,3 +269,122 @@ with tab_read:
     st.caption(f"pages {row['pages']} · {row['words']:,} words · "
                f"{row['paragraphs']} paragraphs · {row['dialogue_pct']:.1f}% dialogue")
     st.write(row["text"])
+
+
+# ------------------------------------------------------- Questions & Methods
+# Static reasoning panel: no computation, no new dependencies. It explains the
+# attributes the other tabs already compute, using the same terms as the code.
+with tab_questions:
+    st.markdown("### Questions → signals → methods")
+    st.markdown(
+        "I chose attributes by starting from questions a reader might actually ask "
+        "about a novel, then selecting signals that are measurable from the corpus, "
+        "traceable to the source, and complementary rather than redundant."
+    )
+
+    principles = [
+        ("Reader-relevant", "The metric should answer a question about the story or writing."),
+        ("Extractable", "It must be computable from the corpus rather than inferred without evidence."),
+        ("Traceable", "Results should retain chapter/page provenance where possible."),
+        ("Complementary", "Structural, lexical, affective and semantic signals should reveal "
+                          "different aspects of the same corpus."),
+    ]
+    for col, (name, text) in zip(st.columns(4), principles):
+        with col:
+            st.markdown(f"**{name}**")
+            st.caption(text)
+
+    cards = [
+        {
+            "question": "How does the pacing change through the book?",
+            "why": "Chapter length, sentence length and dialogue share are simple but "
+                   "interpretable signals of narrative tempo and writing density.",
+            "attributes": [
+                "chapter length",
+                "average sentence length",
+                "dialogue share (words inside quotation spans)",
+                "unique vocabulary per chapter (lexical diversity)",
+            ],
+            "method": [
+                "chapter segmentation",
+                "token and sentence counts",
+                "quotation-span counting",
+                "vocabulary statistics",
+            ],
+            "inspect": "the Corpus analytics tab — chapter-length bars coloured by dialogue "
+                       "share, and the per-chapter table (words, sentences, average sentence "
+                       "length, dialogue %, unique words).",
+            "limitation": "These describe form, not why a chapter feels fast or slow.",
+        },
+        {
+            "question": "Which characters dominate different parts of the story?",
+            "why": "Chapter-level presence makes changes in narrative focus visible across the book.",
+            "attributes": ["character presence by chapter"],
+            "method": [
+                "curated character-presence lexicon",
+                "exact word-boundary matching (not NER, not automatic character discovery)",
+            ],
+            "inspect": "the Corpus analytics tab — the character-presence heatmap (14 "
+                       "most-mentioned names × chapters) and the per-chapter table.",
+            "limitation": "Aliases, pronouns and ambiguous surnames are not fully resolved; "
+                          "names outside the fixed list are invisible.",
+        },
+        {
+            "question": "How does emotional tone change across the narrative?",
+            "why": "It gives a compact view of shifts between more positive and negative "
+                   "language over narrative time.",
+            "attributes": ["chapter-level sentiment trajectory"],
+            "method": [
+                "sentence-level VADER compound scores",
+                "aggregated by chapter (sampled sentences per chapter)",
+            ],
+            "inspect": "the Corpus analytics tab — the emotional arc line chart and the "
+                       "sentiment column of the per-chapter table.",
+            "limitation": "A lexicon-based proxy, not an emotion model and not ground truth.",
+        },
+        {
+            "question": "How is meaning distributed through the book, and how can a reader retrieve it?",
+            "why": "Dense and lexical representations expose different notions of similarity: "
+                   "semantic paraphrase versus exact or rare terminology.",
+            "attributes": [
+                "sentence-aware chunks",
+                "dense embeddings",
+                "TF-IDF sparse representation",
+                "Reciprocal Rank Fusion",
+                "PCA projection of embeddings",
+            ],
+            "method": [
+                "sentence-aware chunking with chapter/page provenance",
+                "dense embeddings (fastembed ONNX, 384-d) and TF-IDF (1–2 grams)",
+                "Reciprocal Rank Fusion of the two ranked lists",
+                "PCA of the embedding matrix for the map",
+            ],
+            "inspect": "Search (three modes, chapter/page citations, per-hit dense and tf-idf "
+                       "ranks), the Embedding space tab, and evaluate.py's measured Hit@1 / MRR.",
+            "limitation": "PCA is a 2-D projection and should not be interpreted as a faithful "
+                          "map of all high-dimensional relationships.",
+        },
+    ]
+
+    st.divider()
+    for pair in (cards[0:2], cards[2:4]):
+        cols = st.columns(2)
+        for col, card in zip(cols, pair):
+            with col, st.container(border=True):
+                st.markdown(f"**{card['question']}**")
+                st.markdown(f"Why it is interesting. {card['why']}")
+                st.markdown("**Measurable attribute**")
+                st.markdown("\n".join(f"- {a}" for a in card["attributes"]))
+                st.markdown("**Extraction method**")
+                st.markdown("\n".join(f"- {m}" for m in card["method"]))
+                st.markdown(f"**What you can inspect.** {card['inspect']}")
+                st.caption(f"Limitation — {card['limitation']}")
+
+    st.divider()
+    st.markdown("**Extraction flow**")
+    # components.html (shipped with Streamlit) because st.html sanitises <svg> away
+    components.html(
+        "<body style='margin:0;background:transparent'>" + extraction_flow_svg() + "</body>",
+        height=640, scrolling=False,
+    )
+    st.caption("Every box names a component of this repository; the same terms appear in the README.")

@@ -26,3 +26,21 @@ def test_app_renders_and_reports_canonical_dialogue_share(
     # regression: dialogue_pct must exist on the per-chapter table the Reader uses
     columns = {c for t in at.dataframe for c in t.value.columns}
     assert "dialogue_pct" in columns
+
+
+def test_questions_and_methods_tab(tiny_index: dict, tmp_path: Path, monkeypatch):
+    """The reasoning tab renders, names the methods accurately, and ships one SVG."""
+    monkeypatch.setenv("CORPUS_DIR", str(tmp_path / "corpus"))
+    monkeypatch.setenv("CORPUS_INDEX_DIR", str(tmp_path / "index"))
+    monkeypatch.setenv("CORPUS_ENCODER", "hashing")
+
+    at = AppTest.from_file(str(APP), default_timeout=180).run()
+    assert not at.exception, [e.value for e in at.exception]
+
+    assert [t.label for t in at.tabs][-1] == "🧭 Questions & Methods"
+
+    text = " ".join(el.value for el in at.markdown) + " ".join(el.value for el in at.caption)
+    assert "Questions → signals → methods" in text
+    assert "curated character-presence lexicon" in text          # not NER
+    assert "lexicon-based proxy, not an emotion model" in text    # honest sentiment label
+    assert "Reciprocal Rank Fusion" in text
